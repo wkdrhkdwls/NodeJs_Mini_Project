@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const conn = require("../mariadb");
 
 router.use(express.json()); // http 외 모듈 'json'
 
@@ -55,31 +56,29 @@ router.post("/join", function (req, res) {
       message: `입력 값을 다시 확인해주세요.`,
     });
   } else {
-    const { userId } = req.body;
-    db.set(userId, req.body);
+    const { email, name, password, contact } = req.body;
 
-    res.status(201).json({
-      message: `${db.get(userId).name}님 환영합니다.`,
-    });
+    conn.query(
+      `INSERT INTO users (email,name,password,contact) VALUES (?,?,?,?)`,
+      [email, name, password, contact],
+      function (err, results, fields) {
+        res.status(201).json(results);
+      }
+    );
   }
 });
 
 router
   .route("/users")
   .get(function (req, res) {
-    let { userId } = req.body;
-
-    const user = db.get(userId);
-    if (user) {
-      res.status(200).json({
-        userId: user.userId,
-        name: user.name,
-      });
-    } else {
-      res.status(404).json({
-        message: "회원 정보가 없습니다.",
-      });
-    }
+    let { email } = req.body;
+    conn.query(
+      `SELECT * FROM users WHERE email = ?`,
+      email,
+      function (err, results, fields) {
+        res.status(200).json(results);
+      }
+    );
   })
   .delete(function (req, res) {
     let { userId } = req.body;
