@@ -5,17 +5,27 @@ const { body, param, validationResult } = require("express-validator");
 
 router.use(express.json());
 
-let db = new Map();
-let id = 1;
+const validate = (req, res, next) => {
+  const err = validationResult(req);
+
+  if (err.isEmpty()) {
+    return next(); // 다음 할 일(미들 웨어, 함수)
+  } else {
+    return res.status(400).end(err.array());
+  }
+};
+
+function notFoundChannel(res) {
+  res.status(404).json({
+    message: "채널 정보를 찾을 수 없습니다.",
+  });
+}
 
 router
   .route("/")
   .get(
-    body("userId").notEmpty().isInt().withMessage("숫자를 입력!"),
-    (req, res) => {
-      const err = validationResult(req);
-      if (!err.isEmpty()) return res.status(400).end(err.array());
-
+    [body("userId").notEmpty().isInt().withMessage("숫자를 입력!"), validate],
+    (req, res, next) => {
       let { userId } = req.body;
 
       let sql = `SELECT * FROM channels WHERE user_id = ?`;
@@ -34,12 +44,9 @@ router
     [
       body("userId").notEmpty().isInt().withMessage("숫자를 입력!"),
       body("name").notEmpty().isString().withMessage("문자 입력 필요!"),
+      validate,
     ], // 비면 안되고 정수여야한다.
     (req, res) => {
-      const err = validationResult(req);
-
-      if (!err.isEmpty()) return res.status(400).end(err.array()); // 함수를 종료하며 밑을 읽지않고 끝낸다.
-
       const { name, userId } = req.body;
       let sql = `INSERT INTO channels (name, user_id) VALUES (?,?)`;
       let values = [name, userId];
@@ -53,27 +60,27 @@ router
 
 router
   .route("/:id")
-  .get(param("id".notEmpty().withMessage("채널id 필요")), (req, res) => {
-    const err = validationResult(req);
+  .get(
+    [param("id").notEmpty().withMessage("채널id 필요"), validate],
+    (req, res) => {
+      let { id } = req.params;
+      id = parseInt(id);
 
-    if (!err.isEmpty()) return res.status(400).end(err.array());
+      let sql = `SELECT * FROM channels WHERE id = ?`;
 
-    let { id } = req.params;
-    id = parseInt(id);
+      conn.query(sql, id, function (err, results) {
+        if (err) return res.status(400).end();
 
-    let sql = `SELECT * FROM channels WHERE id = ?`;
-
-    conn.query(sql, id, function (err, results) {
-      if (err) return res.status(400).end();
-
-      if (results.length) res.status(200).json(results);
-      else notFoundChannel(res);
-    });
-  })
+        if (results.length) res.status(200).json(results);
+        else notFoundChannel(res);
+      });
+    }
+  )
   .put(
     [
       param("id".notEmpty().withMessage("채널id 필요")),
       body("name").notEmpty().isString.withMessage("채널명 오류"),
+      validate,
     ],
     (req, res) => {
       const err = validationResult(req);
@@ -98,26 +105,24 @@ router
       });
     }
   )
-  .delete(param("id".notEmpty().withMessage("채널id 필요")), (req, res) => {
-    const err = validationResult(req);
+  .delete(
+    [param("id").notEmpty().withMessage("채널id 필요"), validate],
+    (req, res) => {
+      let { id } = req.params;
+      id = parseInt(id);
 
-    if (!err.isEmpty()) return res.status(400).end(err.array());
+      let sql = `DELETE FROM channels WHERE id = ?`;
 
-    let { id } = req.params;
-    id = parseInt(id);
+      conn.query(sql, id, function (err, results) {
+        if (err) return res.status(400).end();
 
-    let sql = `DELETE FROM channels WHERE id = ?`;
-
-    conn.query(sql, id, function (err, results) {
-      if (err) return res.status(400).end();
-      res.status(200).json(results);
-    });
-  });
-
-function notFoundChannel(res) {
-  res.status(404).json({
-    message: "채널 정보를 찾을 수 없습니다.",
-  });
-}
+        if (results.affectedRows == 0) {
+          return res.status(400).end();
+        } else {
+          res.status(200).json(results);
+        }
+      });
+    }
+  );
 
 module.exports = router;
